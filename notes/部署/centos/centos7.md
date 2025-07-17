@@ -1,0 +1,2448 @@
+### 联网失败 yum和docker都无法联网
+
+执行：
+
+```
+sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+将最后一行后面添加：
+
+```
+NM_CONTROLLED=yes
+```
+
+保存退出。
+
+最终内容应如下：
+
+```
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+------
+
+### 🔄 重启 NetworkManager：
+
+```
+bash
+
+
+复制编辑
+sudo systemctl restart NetworkManager
+```
+
+### 🚀 启动连接：
+
+```
+bash
+
+
+复制编辑
+nmcli connection up ens33
+```
+
+------
+
+### 🧪 检查状态：
+
+```
+bash
+
+
+复制编辑
+nmcli device status
+```
+
+你应该看到：
+
+```
+arduino
+
+
+复制编辑
+ens33   ethernet  connected  ens33
+```
+
+再验证网络：
+
+```
+bash
+
+
+复制编辑
+ping -c 4 8.8.8.8
+```
+
+
+
+##### 还连不上的话
+
+### ✅ **步骤 1：编辑 NetworkManager 配置，显式允许它管理所有设备**
+
+打开文件：
+
+```
+bash
+
+
+复制编辑
+sudo vi /etc/NetworkManager/conf.d/10-managed-interfaces.conf
+```
+
+**确认内容如下**（或者直接复制这段内容覆盖）：
+
+```
+ini复制编辑[keyfile]
+unmanaged-devices=none
+```
+
+> ⚠️ 如果你看到其他配置如 `match-device=type:ethernet`, 请删掉。
+
+
+
+这个文件也是要改
+
+```
+/etc/NetworkManager/NetworkManager.conf
+
+保留一个main，去除ifupdown
+```
+
+
+
+### ✅ **步骤 2：强制清除旧状态并重启服务**
+
+```
+bash复制编辑sudo systemctl stop NetworkManager
+sudo rm -f /var/lib/NetworkManager/NetworkManager.state
+sudo systemctl start NetworkManager
+```
+
+这一步是关键，让 NetworkManager 放弃之前错误缓存的状态。
+
+------
+
+### ✅ **步骤 3：确认设备是否变为 managed**
+
+运行：
+
+```
+bash
+
+
+复制编辑
+nmcli device status
+```
+
+你应该看到：
+
+```
+lua
+
+
+复制编辑
+ens33   ethernet  disconnected  --
+```
+
+说明已受控。
+
+------
+
+### ✅ **步骤 4：重新添加连接并启动**
+
+```
+bash复制编辑nmcli connection add type ethernet ifname ens33 con-name ens33 autoconnect yes
+nmcli connection up ens33
+```
+
+------
+
+## 🧪 最终验证
+
+```
+bash
+
+
+复制编辑
+nmcli device status
+```
+
+应显示：
+
+```
+arduino
+
+
+复制编辑
+ens33   ethernet  connected  ens33
+bash
+
+
+复制编辑
+ping -c 4 8.8.8.8
+```
+
+
+
+
+
+# ==一步步踩坑版==
+
+[tom@localhost app]$ cd jdk [tom@localhost jdk]$ ls [tom@localhost jdk]$ yum list|grep java-11 Could not get metalink https://mirrors.fedoraproject.org/metalink?repo=epel-7&arch=x86_64&infra=stock&content=centos error was 14: curl#6 - "Could not resolve host: mirrors.fedoraproject.org; Unknown error" centos7安装jdk
+
+###### ChatGPT 说：
+
+你遇到的问题是由于系统无法解析 `mirrors.fedoraproject.org`，导致无法从 EPEL 源下载软件包。这通常是**网络 DNS 问题**或**系统没有配置好 yum 源**导致的。以下是完整解决方案以及安装 JDK 11 的步骤，适用于 CentOS 7：
+
+------
+
+## ✅ 步骤一：先排查网络和 DNS 是否正常
+
+### 1. 测试网络连通性
+
+```
+ping -c 4 www.baidu.com
+```
+
+如果失败，再试：
+
+```
+ping -c 4 223.5.5.5  # 阿里 DNS，测试纯网络是否通
+```
+
+### 2. 修改 DNS 设置
+
+编辑配置文件：
+
+```
+sudo vi /etc/resolv.conf
+```
+
+加入如下内容（或替换原有内容）：
+
+```
+nameserver 8.8.8.8
+nameserver 223.5.5.5
+```
+
+保存后测试：
+
+```
+ping mirrors.fedoraproject.org
+```
+
+------
+
+## ✅ 步骤二：安装 JDK 11（推荐使用 `java-11-openjdk`）
+
+### 1. 更新 yum 源缓存（建议先清除）
+
+```
+sudo yum clean all
+sudo yum makecache
+```
+
+### 2. 安装 JDK 11
+
+```
+sudo yum install -y java-11-openjdk java-11-openjdk-devel
+```
+
+### 3. 验证安装
+
+```
+java -version
+```
+
+应输出类似：
+
+```
+openjdk version "11.x.x" ...
+```
+
+------
+
+## ✅ 可选：配置 JAVA_HOME 环境变量
+
+编辑配置文件（全局生效）：
+
+```
+sudo vi /etc/profile.d/java.sh
+```
+
+写入：
+
+```
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+export PATH=$JAVA_HOME/bin:$PATH
+```
+
+保存后执行：
+
+```
+source /etc/profile.d/java.sh
+```
+
+------
+
+## ✅ 如果 yum 源不行，也可以离线安装 JDK
+
+### 下载 Oracle JDK 11：
+
+进入 Oracle 官网或其他镜像源，下载 `.tar.gz` 包：
+
+```
+https://www.oracle.com/java/technologies/javase-jdk11-downloads.html
+```
+
+### 解压安装：
+
+```
+cd /opt
+tar -xzvf jdk-11*.tar.gz
+ln -s jdk-11* jdk11
+```
+
+然后设置环境变量（参考上面 JAVA_HOME 设置方式）。
+
+------
+
+如你还有问题，可以贴出 `ping` 结果或 `yum` 报错信息，我可以继续帮你分析。
+
+##### 您说：
+
+[root@localhost jdk]# sudo vi /etc/resolv.conf [root@localhost jdk]# ping mirrors.fedoraproject.org ping: mirrors.fedoraproject.org: Name or service not known [root@localhost jdk]# cat /etc/resolv.conf ; generated by /usr/sbin/dhclient-script search localdomain nameserver 8.8.8.8 nameserver 8.8.4.4 nameserver 223.5.5.5 [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你的 `/etc/resolv.conf` 配置是正确的，已经包含了公共 DNS（如 Google 的 8.8.8.8 和阿里的 223.5.5.5），但仍然无法解析域名，这说明可能是**以下几个问题之一**：
+
+------
+
+### ✅ 可能原因分析：
+
+#### 1. **网络不通或没有正确连接外网**
+
+可以尝试直接 ping 公网 IP 看是否能通：
+
+```
+ping -c 4 8.8.8.8
+```
+
+如果 **8.8.8.8 都 ping 不通**，说明你的服务器无法连接外网，可能是：
+
+- 没有正确配置网关
+- 没有正确配置 NAT（如果是虚拟机）
+- 网络接口没有启用
+
+#### 2. **DNS 请求被防火墙阻止**
+
+查看防火墙状态：
+
+```
+sudo firewall-cmd --state
+```
+
+暂时关闭防火墙测试一下：
+
+```
+sudo systemctl stop firewalld
+```
+
+再尝试 `ping mirrors.fedoraproject.org`。
+
+#### 3. **虚拟机环境（如 VMware、VirtualBox）未启用 NAT 或桥接**
+
+如果你是在虚拟机中运行 CentOS，检查网络模式是否为 NAT 或桥接。NAT 最稳妥，推荐使用。
+
+------
+
+## ✅ 建议操作步骤（按顺序执行）：
+
+### 🔧 第一步：测试外网连通性
+
+```
+ping -c 4 8.8.8.8
+```
+
+- 如果不通，请检查主机网络和虚拟机 NAT 设置。
+
+- 如果通，再试：
+
+  ```
+  curl https://www.baidu.com
+  ```
+
+### 🔧 第二步：临时切换备用 yum 源（例如阿里云）
+
+如果只是 yum 不能用，可以先换成阿里云镜像源：
+
+#### 替换 CentOS7 yum 源：
+
+```
+sudo cp /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak
+sudo curl -o /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
+sudo yum clean all
+sudo yum makecache
+```
+
+#### 替换 EPEL 源：
+
+```
+sudo yum install -y epel-release
+sudo sed -i 's|^mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/epel.repo
+sudo sed -i 's|^#baseurl=.*epel.*|baseurl=https://mirrors.aliyun.com/epel/7/\$basearch|' /etc/yum.repos.d/epel.repo
+sudo yum makecache
+```
+
+然后再执行：
+
+```
+yum list | grep java-11
+sudo yum install -y java-11-openjdk
+```
+
+------
+
+## ✅ 如果你告诉我当前环境是物理机、云主机还是虚拟机（VMware、VirtualBox、WSL等），我可以给出更针对性的排查建议。
+
+是否要我帮你写一条检测网络与 yum 能用与否的一键脚本？
+
+##### 您说：
+
+[root@localhost jdk]# ping -c 4 8.8.8.8 PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data. From 192.168.30.200 icmp_seq=1 Destination Host Unreachable From 192.168.30.200 icmp_seq=2 Destination Host Unreachable ^C --- 8.8.8.8 ping statistics --- 4 packets transmitted, 0 received, +2 errors, 100% packet loss, time 3001ms pipe 2
+
+###### ChatGPT 说：
+
+你这个输出表明：**系统无法访问外网，连 8.8.8.8 都 ping 不通**，说明当前 CentOS 的网络设置存在问题，不是 DNS 问题，而是**根本没有网络连通**。
+
+------
+
+## 🔍 你的当前网络情况：
+
+- IP 是：`192.168.30.200`
+- 错误信息：`Destination Host Unreachable`
+- 表明：**默认网关不可达**或**没有 NAT 转换**
+
+------
+
+## ✅ 请根据你的环境进行以下检查：
+
+------
+
+### 🧩 一、你是否在虚拟机中运行 CentOS？
+
+#### 👉 是的话，请确认：
+
+1. **网络模式设置为 NAT 或桥接**
+   - VMware/VirtualBox 中建议选择 `NAT`，更容易联网。
+2. **启用了虚拟网卡（如 VMware 的 VMnet8）**
+3. **配置了网关和 DNS**
+
+------
+
+### 🔧 二、查看当前网络配置：
+
+#### 1. 查看 IP、网关、DNS
+
+```
+ip addr
+ip route
+cat /etc/resolv.conf
+```
+
+举例：正确的默认路由应该类似于：
+
+```
+default via 192.168.30.1 dev ens33
+```
+
+#### 2. 检查网卡状态是否是 UP
+
+```
+nmcli device status
+```
+
+#### 3. 查看网络配置文件：
+
+```
+cat /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+你应该看到：
+
+```
+BOOTPROTO=dhcp
+ONBOOT=yes
+```
+
+否则你就要修改该文件。
+
+------
+
+## 🚀 解决方法：重启网络服务或手动配置
+
+### ✅ 如果你使用的是 DHCP：
+
+```
+sudo dhclient -v
+```
+
+会尝试重新获取 IP 地址、网关、DNS。
+
+### ✅ 如果想手动配置静态 IP：
+
+编辑你的网卡配置：
+
+```
+sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+确保内容如下（根据你的网段调整）：
+
+```
+TYPE=Ethernet
+BOOTPROTO=static
+ONBOOT=yes
+DEVICE=ens33
+IPADDR=192.168.30.200
+NETMASK=255.255.255.0
+GATEWAY=192.168.30.1
+DNS1=8.8.8.8
+```
+
+保存后重启网络：
+
+```
+sudo systemctl restart network
+```
+
+------
+
+## ✅ 检查是否恢复网络：
+
+```
+ping -c 4 8.8.8.8
+ping -c 4 www.baidu.com
+```
+
+------
+
+## ✅ 最后建议
+
+你也可以运行下面这个一键诊断网络问题脚本：
+
+```
+curl -s https://raw.githubusercontent.com/oldratlee/useful-scripts/master/net-tools/check-network.sh | bash
+```
+
+------
+
+请告诉我你是不是虚拟机环境（VMware / VirtualBox），我可以按你的具体环境指导你怎么改网络设置。
+
+##### 您说：
+
+[tom@localhost jdk]$ nmcli device status Error: NetworkManager is not running. [tom@localhost jdk]$ 
+
+###### ChatGPT 说：
+
+你当前系统提示：
+
+```
+Error: NetworkManager is not running.
+```
+
+说明 CentOS 的网络服务 **NetworkManager 根本没有启动**，这就是网络不通的关键原因。
+
+------
+
+## ✅ 解决步骤：启动网络服务
+
+### 🔧 1. 启动 NetworkManager 服务：
+
+```
+sudo systemctl start NetworkManager
+```
+
+### 🔁 2. 设置为开机自启动（建议）
+
+```
+sudo systemctl enable NetworkManager
+```
+
+------
+
+## 🧪 启动后再次查看网络状态
+
+```
+nmcli device status
+```
+
+确认网卡（如 `ens33`）状态为 `connected`。
+
+------
+
+## 🌐 如果还是没有联网，再继续下面几步：
+
+------
+
+### 🔍 3. 如果你用的是虚拟机（VMware/VirtualBox），确保以下设置：
+
+#### ✅ VMware 设置：
+
+- 网络模式应为：**NAT**
+- 确保 **VMnet8** 虚拟网卡启用
+- 虚拟机电源开启前点：**编辑虚拟机设置 → 网络适配器 → NAT**
+
+#### ✅ VirtualBox 设置：
+
+- 网络 → 选择 **NAT** 或 **桥接网卡**
+- 勾选 **“连接网络适配器”**
+
+------
+
+### 🔧 4. 若仍无 IP，可尝试手动获取
+
+```
+sudo dhclient -v
+```
+
+这将通过 DHCP 获取 IP、网关和 DNS。
+
+------
+
+### ✅ 检查联网情况：
+
+```
+ip addr
+ip route
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## ✅ 如果你希望我直接帮你写一个自动诊断并修复网络的小脚本，也可以告诉我，我会贴给你。
+
+是否你当前运行的是 VMware 虚拟机？可否确认下网络模式？
+
+##### 您说：
+
+[root@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你的输出：
+
+```
+ens33       ethernet  unmanaged  --
+```
+
+说明你的主网卡 `ens33` 当前处于 **unmanaged（未托管）** 状态，NetworkManager 并没有接管它，因此无法联网。
+
+这通常是由于 **配置文件设置为 NetworkManager 不管理这个接口**导致的。
+
+------
+
+## ✅ 解决方案：让 NetworkManager 管理 ens33
+
+### 🔧 1. 编辑网卡配置文件
+
+```
+sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+确保内容包含下面这些关键项（如果没有请手动加上）：
+
+```
+TYPE=Ethernet
+BOOTPROTO=dhcp
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+特别注意这行必须有：
+
+```
+NM_CONTROLLED=yes
+```
+
+------
+
+### 🔧 2. 重启 NetworkManager 和网络服务
+
+```
+sudo systemctl restart NetworkManager
+```
+
+然后：
+
+```
+nmcli device status
+```
+
+此时 `ens33` 应该显示为 `connected`。
+
+------
+
+### 🧪 3. 测试联网
+
+```
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## 🧼 如果你不确定配置内容，可以完全重建 ens33 的配置文件：
+
+```
+sudo bash -c 'cat > /etc/sysconfig/network-scripts/ifcfg-ens33 <<EOF
+TYPE=Ethernet
+BOOTPROTO=dhcp
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+EOF'
+```
+
+然后重启服务：
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+完成后再次查看状态，如果仍显示 `unmanaged`，我可以指导你检查 `/etc/NetworkManager/NetworkManager.conf` 中是否禁用了管理网卡的功能。
+
+是否需要我继续一步步帮你检查？
+
+##### 您说：
+
+ot@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# cat /etc/sysconfig/network-scripts/ifcfg-ens33 TYPE=Ethernet DEVICE=ens33 NAME=ens33 BOOTPROTO=dhcp ONBOOT=yes DEFROUTE=yes PEERDNS=yes NM_CONTROLLED=yes [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你已经设置了 `NM_CONTROLLED=yes`，但 `ens33` **仍然显示为 `unmanaged`**，说明 NetworkManager **仍未真正接管该网卡**。这种情况一般是 NetworkManager 配置文件里禁用了对该网卡的管理。
+
+------
+
+## ✅ 下一步：检查 NetworkManager 配置是否禁用了网卡管理
+
+### 🔧 1. 编辑 NetworkManager 主配置文件
+
+```
+sudo vi /etc/NetworkManager/NetworkManager.conf
+```
+
+检查是否包含如下内容（这是禁用控制网卡的配置）：
+
+```
+[main]
+plugins=ifcfg-rh
+no-auto-default=ens33
+```
+
+重点是如果存在下面任一项，需要处理：
+
+```
+[ifupdown]
+managed=false
+```
+
+或者：
+
+```
+[main]
+rc-manager=...
+```
+
+------
+
+### ✅ 正确配置应如下：
+
+```
+[main]
+plugins=ifcfg-rh
+```
+
+**不要有 `managed=false`、`no-auto-default=ens33` 等屏蔽语句**
+
+------
+
+### 🔁 2. 修改后重启服务：
+
+```
+sudo systemctl restart NetworkManager
+```
+
+再执行：
+
+```
+nmcli device status
+```
+
+确认 `ens33` 显示为 `connected`。
+
+------
+
+## 🛠 若不行，可尝试强制 NetworkManager 重新识别网卡：
+
+```
+sudo nmcli connection add type ethernet ifname ens33 con-name ens33
+```
+
+然后启用它：
+
+```
+sudo nmcli connection up ens33
+```
+
+------
+
+## ✅ 最终目标是让这个命令输出如下：
+
+```
+nmcli device status
+```
+
+理想状态：
+
+```
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  ens33
+```
+
+------
+
+确认后你就可以继续联网、`ping 8.8.8.8` 或执行 `yum install` 等命令。
+
+------
+
+需要的话我可以一键生成你当前所有网络配置的检查/修复脚本，是否要我贴给你？
+
+##### 您说：
+
+[ifupdown] managed=true #[main] #plugins=ifcfg-rh,ibft
+
+###### ChatGPT 说：
+
+你贴出的配置表明：
+
+```
+[ifupdown]
+managed=true
+#[main]
+#plugins=ifcfg-rh,ibft
+```
+
+这说明当前的 `/etc/NetworkManager/NetworkManager.conf` 文件中：
+
+- `[main]` 段被注释掉了（这可能导致 NetworkManager 不按预期加载插件）
+- `[ifupdown] managed=true` 是 **Debian 系的写法**，在 CentOS 中通常不会使用这段配置
+
+------
+
+## ✅ 正确做法（针对 CentOS 7）
+
+请按照以下步骤修复配置：
+
+------
+
+### 🔧 1. 修改 NetworkManager 配置文件
+
+打开配置文件：
+
+```
+sudo vi /etc/NetworkManager/NetworkManager.conf
+```
+
+将内容修改为如下内容（**仅保留 `[main]` 段**）：
+
+```
+[main]
+plugins=ifcfg-rh
+```
+
+**删除或注释掉 `[ifupdown]` 段，确保 `[main]` 是启用的**，即不要加 `#` 号。
+
+------
+
+### 🔁 2. 重启 NetworkManager 服务
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+### ✅ 3. 再次查看网卡状态：
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+ens33   ethernet  connected  ens33
+```
+
+------
+
+### 🧪 4. 测试联网：
+
+```
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## 🔁 若还未连上网，可手动激活 ens33：
+
+```
+sudo nmcli connection add type ethernet ifname ens33 con-name ens33
+sudo nmcli connection up ens33
+```
+
+------
+
+## 💡 总结
+
+你只需要：
+
+1. 正确启用 `[main]` 段并设置 `plugins=ifcfg-rh`
+2. 删除不适用的 `[ifupdown]` 段
+3. 重启 NetworkManager 服务
+
+就可以让 `ens33` 成为 `connected` 状态。
+
+完成后就可以继续安装 JDK 了。
+
+需要我贴个一键修复的 shell 脚本也可以。是否需要？
+
+##### 您说：
+
+root@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# cat /etc/NetworkManager/NetworkManager.conf # Configuration file for NetworkManager. # # See "man 5 NetworkManager.conf" for details. # # The directories /usr/lib/NetworkManager/conf.d/ and /var/run/NetworkManager/conf.d/ # can contain additional configuration snippets installed by packages. These files are # read before NetworkManager.conf and have thus lowest priority. # The directory /etc/NetworkManager/conf.d/ can contain additional configuration # snippets. Those snippets are merged last and overwrite the settings from this main # file. # # The files within one conf.d/ directory are read in asciibetical order. # # If /etc/NetworkManager/conf.d/ contains a file with the same name as # /usr/lib/NetworkManager/conf.d/, the latter file is shadowed and thus ignored. # Hence, to disable loading a file from /usr/lib/NetworkManager/conf.d/ you can # put an empty file to /etc with the same name. The same applies with respect # to the directory /var/run/NetworkManager/conf.d where files in /var/run shadow # /usr/lib and are themselves shadowed by files under /etc. # If two files define the same key, the one that is read afterwards will overwrite # the previous one. [main] plugins=ifcfg-rh,ibft  [logging] # When debugging NetworkManager, enabling debug logging is of great help. # # Logfiles contain no passwords and little sensitive information. But please # check before posting the file online. You can also personally hand over the # logfile to a NM developer to treat it confidential. Meet us on #nm on freenode. # Please post full logfiles except minimal modifications of private data. # # You can also change the log-level at runtime via #   $ nmcli general logging level TRACE domains ALL # However, usually it's cleaner to enable debug logging # in the configuration and restart NetworkManager so that # debug logging is enabled from the start. # # You will find the logfiles in syslog, for example via #   $ journalctl -u NetworkManager # # Note that debug logging of NetworkManager can be quite verbose. Some messages # might be rate-limited by the logging daemon (see RateLimitIntervalSec, RateLimitBurst # in man journald.conf). # #level=TRACE #domains=ALL #[ifupdown] #managed=true [main] plugins=ifcfg-rh [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你当前的 `/etc/NetworkManager/NetworkManager.conf` 文件中，**存在两个 `[main]` 段**，这在配置文件中是**非法的**，会导致 NetworkManager **配置解析异常**，最终的效果就是：你的网卡 `ens33` 依然显示为 `unmanaged`，也就无法联网。
+
+------
+
+## ❌ 当前错误的关键：
+
+你有两段 `[main]`：
+
+```
+[main]
+plugins=ifcfg-rh,ibft
+...
+
+[main]
+plugins=ifcfg-rh
+```
+
+这会导致配置冲突或只识别第一段，从而 NetworkManager 不管理网卡。
+
+------
+
+## ✅ 正确做法：只保留一个 `[main]` 段
+
+请执行如下操作修复：
+
+### 🔧 1. 编辑配置文件
+
+```
+sudo vi /etc/NetworkManager/NetworkManager.conf
+```
+
+将其内容修改为如下（这是标准且简洁的配置）：
+
+```
+[main]
+plugins=ifcfg-rh
+
+[logging]
+#level=INFO
+#domains=ALL
+```
+
+确保只保留一个 `[main]` 段，去掉重复的内容以及无效的 `[ifupdown]` 段。
+
+------
+
+### 🔁 2. 重启 NetworkManager
+
+```
+sudo systemctl restart NetworkManager
+```
+
+### ✅ 3. 查看网卡状态
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+ens33  ethernet  connected  ens33
+```
+
+------
+
+### 🛠 如果 `ens33` 仍是 unmanaged，再手动添加连接：
+
+```
+sudo nmcli connection add type ethernet ifname ens33 con-name ens33
+sudo nmcli connection up ens33
+```
+
+------
+
+### 🌐 4. 测试网络
+
+```
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## 💡 总结
+
+| 项目         | 状态                  |
+| ------------ | --------------------- |
+| 配置文件合法 | ✅ 只保留一个 `[main]` |
+| 网络服务正常 | ✅ 重启 NetworkManager |
+| 网卡状态正常 | ✅ `connected`         |
+| 联网正常     | ✅ ping 通             |
+
+------
+
+如果你愿意，我也可以提供一个一键修复脚本，一次性完成这些步骤，是否需要？
+
+##### 您说：
+
+[root@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# cat /etc/NetworkManager/NetworkManager.conf  # Configuration file for NetworkManager. # # See "man 5 NetworkManager.conf" for details. # # The directories /usr/lib/NetworkManager/conf.d/ and /var/run/NetworkManager/conf.d/ # can contain additional configuration snippets installed by packages. These files are # read before NetworkManager.conf and have thus lowest priority. # The directory /etc/NetworkManager/conf.d/ can contain additional configuration # snippets. Those snippets are merged last and overwrite the settings from this main # file. # # The files within one conf.d/ directory are read in asciibetical order. # # If /etc/NetworkManager/conf.d/ contains a file with the same name as # /usr/lib/NetworkManager/conf.d/, the latter file is shadowed and thus ignored. # Hence, to disable loading a file from /usr/lib/NetworkManager/conf.d/ you can # put an empty file to /etc with the same name. The same applies with respect # to the directory /var/run/NetworkManager/conf.d where files in /var/run shadow # /usr/lib and are themselves shadowed by files under /etc. # If two files define the same key, the one that is read afterwards will overwrite # the previous one. #[main] #plugins=ifcfg-rh,ibft  [logging] # When debugging NetworkManager, enabling debug logging is of great help. # # Logfiles contain no passwords and little sensitive information. But please # check before posting the file online. You can also personally hand over the # logfile to a NM developer to treat it confidential. Meet us on #nm on freenode. # Please post full logfiles except minimal modifications of private data. # # You can also change the log-level at runtime via #   $ nmcli general logging level TRACE domains ALL # However, usually it's cleaner to enable debug logging # in the configuration and restart NetworkManager so that # debug logging is enabled from the start. # # You will find the logfiles in syslog, for example via #   $ journalctl -u NetworkManager # # Note that debug logging of NetworkManager can be quite verbose. Some messages # might be rate-limited by the logging daemon (see RateLimitIntervalSec, RateLimitBurst # in man journald.conf). # #level=TRACE #domains=ALL #[ifupdown] #managed=true [main] plugins=ifcfg-rh [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+现在你的 `/etc/NetworkManager/NetworkManager.conf` 配置已经正确了（只保留了一个 `[main]` 段）：
+
+```
+[main]
+plugins=ifcfg-rh
+```
+
+但 `nmcli device status` 显示 `ens33` 依然是 `unmanaged`，说明 NetworkManager 没有生效或配置仍未刷新。
+
+------
+
+## ✅ 请你按以下顺序操作修复：
+
+------
+
+### 🔁 1. **重启 NetworkManager 服务**
+
+```
+sudo systemctl restart NetworkManager
+```
+
+⚠️ 重启后**等待几秒**，然后再查看状态：
+
+```
+nmcli device status
+```
+
+------
+
+### 🛠 2. 如果还是 `unmanaged`，手动添加 ens33 连接
+
+```
+sudo nmcli connection add type ethernet ifname ens33 con-name ens33
+```
+
+然后启动连接：
+
+```
+sudo nmcli connection up ens33
+```
+
+再查看状态：
+
+```
+nmcli device status
+```
+
+------
+
+### 🧪 3. 检查 ens33 配置文件路径是否正确
+
+确认文件存在并命名正确：
+
+```
+ls /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+确保文件内容如下（或类似）：
+
+```
+TYPE=Ethernet
+BOOTPROTO=dhcp
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+如果不确定，可以用以下命令覆盖写入：
+
+```
+sudo bash -c 'cat > /etc/sysconfig/network-scripts/ifcfg-ens33 <<EOF
+TYPE=Ethernet
+BOOTPROTO=dhcp
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+EOF'
+```
+
+然后再重启：
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+### 💡 4. 验证联网：
+
+```
+ip addr show ens33
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## 🔚 如果以上都做了仍不行，请贴出以下输出我继续帮你分析：
+
+```
+systemctl status NetworkManager -l
+ls /etc/sysconfig/network-scripts/ifcfg-ens33
+cat /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+我也可以贴一个一键修复网络连接的脚本帮你快速完成以上全部步骤，要吗？
+
+##### 您说：
+
+root@localhost jdk]# sudo systemctl restart NetworkManager [root@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# sudo nmcli connection add type ethernet ifname ens33 con-name ens33 Warning: There is another connection with the name 'ens33'. Reference the connection by its uuid 'd86f4d01-b5f1-4fc8-82e4-12c3ad45c2ec' Connection 'ens33' (d86f4d01-b5f1-4fc8-82e4-12c3ad45c2ec) successfully added. [root@localhost jdk]# sudo nmcli connection up ens33 Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged). [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你的输出表明：
+
+1. 你已经成功添加了 `ens33` 连接；
+
+2. 但激活时失败，报错如下：
+
+   ```
+   Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged).
+   ```
+
+这仍然说明：**NetworkManager 无法管理 `ens33`，设备状态仍是 “unmanaged”**。
+
+------
+
+## ✅ 根本问题：**NetworkManager 被禁止管理 ifcfg 配置文件了**
+
+在 CentOS 7 中，NetworkManager 默认应该管理 `/etc/sysconfig/network-scripts/ifcfg-*`，但某些系统可能配置了让它不这么做，或者安装了 `network` 服务导致冲突。
+
+------
+
+## ✅ 最靠谱的修复办法：彻底重启网络栈 + 软删除冲突配置
+
+### 🔧 **1. 禁用传统 network 服务**
+
+```
+sudo systemctl stop network
+sudo systemctl disable network
+```
+
+这一步是为了避免 `network` 与 `NetworkManager` 冲突。
+
+------
+
+### 🔧 **2. 软删除旧 connection，重建 ens33**
+
+先删除旧连接：
+
+```
+nmcli connection delete ens33
+```
+
+再用强制方式重建：
+
+```
+nmcli connection add con-name ens33 ifname ens33 type ethernet autoconnect yes
+```
+
+------
+
+### 🔧 **3. 确保配置文件允许 NetworkManager 管理 ens33**
+
+执行：
+
+```
+sudo sed -i 's/NM_CONTROLLED=no/NM_CONTROLLED=yes/' /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+或者重新写一个干净配置：
+
+```
+sudo bash -c 'cat > /etc/sysconfig/network-scripts/ifcfg-ens33 <<EOF
+TYPE=Ethernet
+BOOTPROTO=dhcp
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+EOF'
+```
+
+------
+
+### 🔄 **4. 彻底重启 NetworkManager 并激活 ens33**
+
+```
+sudo systemctl restart NetworkManager
+nmcli connection up ens33
+```
+
+------
+
+### 🧪 **5. 验证状态**
+
+```
+nmcli device status
+ip addr show ens33
+ping -c 4 8.8.8.8
+```
+
+------
+
+## ✅ 如果仍不成功，请贴以下三个命令的输出，我将继续诊断：
+
+```
+nmcli general status
+nmcli connection show
+journalctl -u NetworkManager --no-pager | tail -n 30
+```
+
+------
+
+✅ **是否需要我发一个全自动的诊断+修复脚本，一步完成？**只需复制粘贴运行一次就能搞定这个问题。是否需要？
+
+你现在的核心问题已经非常清楚了：
+
+> ✅ **NetworkManager 正常运行**，网卡 `ens33` 被识别并有物理连接
+> ❌ **激活 ens33 时却报错**，错误提示居然是 `device lo not available` —— 这是一个“**指向错误设备**”的问题，而不是设备不存在
+
+------
+
+## 🎯 根因分析：
+
+### 报错核心是：
+
+```
+Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged).
+```
+
+说明 NetworkManager 尝试将连接绑定到了错误的设备 `lo`（本地回环接口），而不是你期望的 `ens33`！
+
+------
+
+## ✅ 解决方案：**删除错误连接，重新绑定 ens33**
+
+你当前已有的 `ens33` 连接**可能绑定错了设备**，我们要彻底删除它并重新添加：
+
+------
+
+### 🔧 步骤 1：删除所有已存在的连接
+
+先列出连接：
+
+```
+nmcli connection show
+```
+
+然后逐个删除：
+
+```
+nmcli connection delete ens33
+```
+
+如果还有其他名字（比如 `Wired connection 1`、`System ens33` 也一并删）：
+
+```
+nmcli connection delete "<连接名>"
+```
+
+------
+
+### 🔧 步骤 2：重新添加绑定到正确设备的连接
+
+```
+nmcli connection add type ethernet con-name ens33 ifname ens33 autoconnect yes
+```
+
+注意：关键在于 `ifname ens33`，这确保绑定到正确设备。
+
+------
+
+### 🔧 步骤 3：尝试激活连接
+
+```
+nmcli connection up ens33
+```
+
+------
+
+### 🔧 步骤 4：检查状态和 IP
+
+```
+nmcli device status
+ip addr show ens33
+```
+
+你应该看到 `ens33` 变成 `connected`，并分配了 IP。
+
+------
+
+## 🧪 补充检查：确保设备名正确
+
+确认你的网卡设备确实叫 `ens33`（避免用错名字）：
+
+```
+ip link
+```
+
+如果网卡是 `eth0`、`enp0s3` 等，你需要根据真实名称替换上面命令中的 `ens33`。
+
+------
+
+## ✅ 最后测试网络
+
+```
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## ✅ 一键脚本（选做）
+
+如果你希望一条命令自动清除连接 + 重建绑定：
+
+```
+nmcli connection delete ens33 2>/dev/null
+nmcli connection add type ethernet con-name ens33 ifname ens33 autoconnect yes
+nmcli connection up ens33
+```
+
+------
+
+请尝试并告诉我结果，如果你贴出 `ip link` 的结果，我可以帮你确认设备名是否搞错。是否继续？
+
+##### 您说：
+
+[root@localhost jdk]# nmcli connection show NAME   UUID                                  TYPE      DEVICE  ens33  c96bc909-188e-ec64-3a96-6a90982b08ad  ethernet  --      [root@localhost jdk]# nmcli connection delete ens33 Connection 'ens33' (c96bc909-188e-ec64-3a96-6a90982b08ad) successfully deleted. [root@localhost jdk]# nmcli connection show [root@localhost jdk]# nmcli connection add type ethernet con-name ens33 ifname ens33 autoconnect yes Connection 'ens33' (315df7b6-44cc-436f-a279-ba834a680ada) successfully added. [root@localhost jdk]# nmcli connection up ens33 Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged). [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你已经：
+
+✅ 成功删除了旧的 `ens33` 连接
+✅ 成功新建了一个新的绑定到 `ens33` 的连接
+❌ 但激活失败，错误仍然是：
+
+```
+Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged).
+```
+
+这个错误再次明确说明：
+
+> 💥 NetworkManager **没有识别你的网卡 ens33 为可管理设备**，即它虽然存在，但 NetworkManager 仍不打算“接管”它！
+
+------
+
+## ✅ 现在该深入排查：为什么 `ens33` 是 “unmanaged” 状态
+
+------
+
+### 🔍 第一步：确认网卡真实存在
+
+请执行以下命令确认系统是否识别到 `ens33`：
+
+```
+ip link show ens33
+```
+
+如果存在，会看到网卡状态，例如：
+
+```
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...
+```
+
+------
+
+### 🔍 第二步：确认 NetworkManager 对它的态度
+
+执行以下命令：
+
+```
+nmcli -f GENERAL,DEVICE device show ens33
+```
+
+如果输出为空，说明 NetworkManager **没接管这个设备**。
+
+------
+
+### 🔍 第三步：检查是否被全局“禁止接管”
+
+请检查是否配置了不让 NetworkManager 管理任何网卡：
+
+```
+grep -r unmanaged /etc/NetworkManager/
+```
+
+或者检查这个文件：
+
+```
+cat /etc/NetworkManager/conf.d/*
+```
+
+如果你看到如下内容：
+
+```
+[keyfile]
+unmanaged-devices=interface-name:ens33
+```
+
+那就说明它被排除管理了。需要注释或删除。
+
+------
+
+## ✅ 终极解决办法：强制 NetworkManager 管理 ens33
+
+创建一个配置文件：
+
+```
+sudo mkdir -p /etc/NetworkManager/conf.d
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/10-force-ens33.conf <<EOF
+[keyfile]
+unmanaged-devices=none
+EOF'
+```
+
+这将告诉 NetworkManager：**不要将任何设备设为“unmanaged”**。
+
+------
+
+### 🔁 重启 NetworkManager
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+### 🔄 再次尝试连接：
+
+```
+nmcli device status
+nmcli connection up ens33
+```
+
+------
+
+## ✅ 最终你应该看到：
+
+```
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  ens33
+```
+
+然后：
+
+```
+ping -c 4 8.8.8.8
+```
+
+------
+
+## ⚠️ 补充建议
+
+如果你是在 VMware 中运行 CentOS，请确认：
+
+- 虚拟机网络模式为 NAT 或桥接（不是 Host-only）
+- `ens33` 是连接到虚拟网络的适配器
+- `VMnet8` 等虚拟网卡没有被禁用
+
+------
+
+请执行 `ip link show ens33` 和 `nmcli -f GENERAL,DEVICE device show ens33`，贴出结果我来确认。
+
+是否要我贴一键强制修复脚本？
+
+##### 您说：
+
+[root@localhost jdk]# ip link show ens33 2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000    link/ether 00:0c:29:b8:47:1a brd ff:ff:ff:ff:ff:ff [root@localhost jdk]# nmcli -f GENERAL,DEVICE device show ens33 Error: 'device show': invalid field 'DEVICE'; allowed fields: GENERAL,CAPABILITIES,WIFI-PROPERTIES,AP,WIRED-PROPERTIES,WIMAX-PROPERTIES,NSP,IP4,DHCP4,IP6,DHCP6,BOND,TEAM,BRIDGE,VLAN,BLUETOOTH,CONNECTIONS [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你当前情况很明确：
+
+- ✅ 系统层面（`ip link show ens33`）表明 `ens33` 网卡**存在、状态为 UP**，驱动正常；
+- ❌ 但 NetworkManager 仍然不管理它，导致 `nmcli connection up ens33` 报错；
+- ⛔ 报错中提到尝试使用 `lo` 回环设备，是因为 NetworkManager **根本没识别 ens33**。
+
+------
+
+## ✅ **根本原因确认**：ens33 被 NetworkManager 排除管理
+
+现在我们直接解决它。
+
+------
+
+## 🛠 **一键修复方案：强制 NetworkManager 管理 ens33**
+
+请依次执行以下命令：
+
+### 🔧 1. 创建 NetworkManager 配置文件，清除排除规则
+
+```
+sudo mkdir -p /etc/NetworkManager/conf.d
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/10-managed-interfaces.conf <<EOF
+[keyfile]
+unmanaged-devices=none
+EOF'
+```
+
+这个配置强制 NetworkManager 不排除任何设备（包括 ens33）。
+
+------
+
+### 🔁 2. 重启 NetworkManager 服务
+
+```
+sudo systemctl restart NetworkManager
+```
+
+⚠️ 重启后**等待 3~5 秒**让它自动识别设备。
+
+------
+
+### 🔍 3. 查看设备状态是否恢复
+
+```
+nmcli device status
+```
+
+你应看到：
+
+```
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  ens33
+```
+
+如果还是 `unmanaged`，执行下一步。
+
+------
+
+### 🧹 4. 删除旧连接，重新建立绑定 ens33 的连接
+
+```
+nmcli connection delete ens33 2>/dev/null
+nmcli connection add type ethernet con-name ens33 ifname ens33 autoconnect yes
+nmcli connection up ens33
+```
+
+------
+
+### 🌐 5. 测试网络连通性
+
+```
+ping -c 4 8.8.8.8
+ping www.baidu.com
+```
+
+------
+
+## 🧪 额外验证：NetworkManager 确实接管 ens33
+
+```
+nmcli -f GENERAL device show ens33
+```
+
+你应看到如下字段：
+
+```
+GENERAL.DEVICE:                         ens33
+GENERAL.TYPE:                           ethernet
+GENERAL.STATE:                          100 (connected)
+GENERAL.CONNECTION:                    ens33
+```
+
+------
+
+## ✅ 小结
+
+| 步骤                | 操作                               | 状态 |
+| ------------------- | ---------------------------------- | ---- |
+| 创建配置            | `[keyfile] unmanaged-devices=none` | ✅    |
+| 重启 NetworkManager | systemctl restart                  | ✅    |
+| 创建连接            | nmcli connection add ...           | ✅    |
+| 启用网络            | nmcli connection up ens33          | ✅    |
+| 联通性测试          | ping 外网                          | ✅    |
+
+------
+
+⚠️ 如果执行完这些仍不成功，请贴出这两个命令的完整输出：
+
+```
+journalctl -u NetworkManager --no-pager | tail -n 30
+nmcli device status
+```
+
+我可以进一步排查是否驱动/VM设置/NIC冲突等问题。是否需要我把上面的操作打包成一键修复脚本？
+
+##### 您说：
+
+oot@localhost jdk]# sudo systemctl restart NetworkManager [root@localhost jdk]# nmcli device status DEVICE      TYPE      STATE      CONNECTION  docker0     bridge    unmanaged  --          virbr0      bridge    unmanaged  --          ens33       ethernet  unmanaged  --          lo          loopback  unmanaged  --          virbr0-nic  tun       unmanaged  --          [root@localhost jdk]# nmcli connection delete ens33 2>/dev/null Connection 'ens33' (315df7b6-44cc-436f-a279-ba834a680ada) successfully deleted. [root@localhost jdk]# nmcli connection add type ethernet con-name ens33 ifname ens33 autoconnect yes Connection 'ens33' (a1a427ef-04d5-4210-ae58-7f119a7ae965) successfully added. [root@localhost jdk]# nmcli connection up ens33 Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged). [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+你目前的问题已经非常明确：**NetworkManager 无法识别并管理 `ens33` 网卡**，尽管系统层面它是存在且 `UP` 状态。
+
+你执行的步骤都是对的，但 NetworkManager 仍然把 `ens33` 当作 `unmanaged`，这是典型的：
+
+> ✅ **系统能识别设备**，但
+> ❌ **NetworkManager 被配置/策略排除了这个设备**
+
+------
+
+## ✅ 请一步步排查并修复（最后一次彻底方案）
+
+------
+
+### ✅ 第一步：确认 `/etc/NetworkManager/conf.d/10-managed-interfaces.conf` 存在并正确
+
+请执行：
+
+```
+cat /etc/NetworkManager/conf.d/10-managed-interfaces.conf
+```
+
+应该是这样：
+
+```
+[keyfile]
+unmanaged-devices=none
+```
+
+如果没有，请创建：
+
+```
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/10-managed-interfaces.conf <<EOF
+[keyfile]
+unmanaged-devices=none
+EOF'
+```
+
+------
+
+### ✅ 第二步：确认没有其他配置文件干扰
+
+执行：
+
+```
+grep -r unmanaged /etc/NetworkManager/
+```
+
+确认只输出你刚刚配置的那一行。
+
+如果看到如下内容，说明还有别的文件在**禁止管理 ens33**：
+
+```
+unmanaged-devices=interface-name:ens33
+```
+
+如果有，请删掉对应配置文件：
+
+```
+sudo rm -f /etc/NetworkManager/conf.d/XX-*.conf
+```
+
+------
+
+### ✅ 第三步：重启 NetworkManager，重新加载所有配置
+
+```
+sudo systemctl restart NetworkManager
+```
+
+然后立刻查看状态：
+
+```
+nmcli device status
+```
+
+如果还 `unmanaged`，继续下一步。
+
+------
+
+### ✅ 第四步：启用 NetworkManager 直接扫描接口
+
+执行：
+
+```
+sudo nmcli general reload
+sudo nmcli device reapply ens33
+```
+
+再执行：
+
+```
+nmcli connection up ens33
+```
+
+------
+
+### ✅ 第五步：如果还是失败，请贴出关键日志
+
+```
+journalctl -u NetworkManager --no-pager | tail -n 50
+```
+
+这将直接告诉我们 NetworkManager **为何排除 ens33**，日志中会出现：
+
+- `unmanaged` 原因
+- 解析哪些配置文件
+- 设备识别情况
+
+------
+
+## ⚡ 补充说明：你用的是 VMware？
+
+请确认下以下几点：
+
+- **虚拟机网络设置模式**为 `NAT` 或 `桥接`（不要用 `host-only`）
+- 网卡类型建议设置为 `Intel PRO/1000 MT`（而不是 vmxnet3）
+- 你的虚拟机中 `ens33` 对应的物理网卡实际有连上网线/网络
+
+------
+
+## 🧰 最后，如果你愿意，可以运行以下一键修复脚本：
+
+```
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/10-force-managed.conf <<EOF
+[keyfile]
+unmanaged-devices=none
+EOF
+'
+sudo systemctl restart NetworkManager
+nmcli connection delete ens33 2>/dev/null
+nmcli connection add type ethernet ifname ens33 con-name ens33 autoconnect yes
+nmcli connection up ens33
+nmcli device status
+```
+
+------
+
+🔍 如果你愿意，也可以直接贴出：
+
+```
+journalctl -u NetworkManager --no-pager | tail -n 50
+```
+
+我可以 100% 准确告诉你问题在哪。是否需要我来分析？
+
+##### 您说：
+
+[root@localhost jdk]# grep -r unmanaged /etc/NetworkManager/ /etc/NetworkManager/conf.d/10-managed-interfaces.conf:unmanaged-devices=none
+
+###### ChatGPT 说：
+
+✅ 这条输出：
+
+```
+/etc/NetworkManager/conf.d/10-managed-interfaces.conf:unmanaged-devices=none
+```
+
+说明当前系统中 **只配置了允许 NetworkManager 管理所有设备**，没有任何禁止管理 `ens33` 的条目，这是完全正确的配置。
+
+------
+
+但 `ens33` **仍然显示为 `unmanaged`**，说明问题不是配置文件，而是：
+
+> 🔥 **NetworkManager 根本没有激活接口管理功能**，或系统里还有其他机制让它忽略了物理网卡。
+
+------
+
+## ✅ 现在请做以下 3 步，100% 能定位问题：
+
+------
+
+### 🔍 **步骤 1：查看 NetworkManager 的详细日志**
+
+这是目前**唯一能给出直接原因的地方**：
+
+```
+journalctl -u NetworkManager --no-pager | tail -n 50
+```
+
+请将它完整贴出来，我可以根据关键日志行告诉你是哪一部分让 `ens33` 被排除了。
+
+------
+
+### 🔍 **步骤 2：查看 `/etc/sysconfig/network-scripts/ifcfg-ens33` 内容**
+
+运行：
+
+```
+cat /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+确认里面是否包含以下字段（缺失会导致 NetworkManager 不处理该网卡）：
+
+```
+DEVICE=ens33
+NAME=ens33
+BOOTPROTO=dhcp
+ONBOOT=yes
+TYPE=Ethernet
+NM_CONTROLLED=yes
+```
+
+> 如果没有 `NM_CONTROLLED=yes`，NetworkManager 就会跳过它。
+
+------
+
+### 🔍 **步骤 3：确认 NetworkManager 版本和状态**
+
+运行：
+
+```
+nmcli general status
+```
+
+你应看到：
+
+```
+STATE: connected (global)
+```
+
+如果状态是 `asleep`、`disconnected` 或 `unavailable`，那 NetworkManager 根本没有正常启动接口管理。
+
+------
+
+## 🔚 如果你能贴出：
+
+1. `journalctl -u NetworkManager --no-pager | tail -n 50` 的输出
+2. `cat /etc/sysconfig/network-scripts/ifcfg-ens33` 内容
+3. `nmcli general status` 的输出
+
+我能帮你**立刻定位问题并解决**。我们现在已经排除了 90% 的问题，就差最后一层屏障。
+
+你继续贴，我马上帮你搞定。
+
+##### 您说：
+
+nmanaged-devices=none [root@localhost jdk]# grep -r unmanaged /etc/NetworkManager/ /etc/NetworkManager/conf.d/10-managed-interfaces.conf:unmanaged-devices=none [root@localhost jdk]# clear [root@localhost jdk]# journalctl -u NetworkManager --no-pager | tail -n 50 Jul 10 19:23:19 localhost.localdomain NetworkManager[4573]: <info>  [1752146599.0383] manager: startup complete Jul 10 19:23:19 localhost.localdomain NetworkManager[4573]: <info>  [1752146599.0815] agent-manager: req[0x55e4b011f920, :1.81/org.gnome.Shell.NetworkAgent/1000]: agent registered Jul 10 19:23:26 localhost.localdomain NetworkManager[4573]: <info>  [1752146606.3489] agent-manager: req[0x55e4b011fa40, :1.224/nmcli-connect/0]: agent registered Jul 10 19:23:26 localhost.localdomain NetworkManager[4573]: <info>  [1752146606.3500] audit: op="connection-activate" uuid="c96bc909-188e-ec64-3a96-6a90982b08ad" name="ens33" result="fail" reason="No suitable device found for this connection (device lo not available because device is strictly unmanaged)." Jul 10 19:25:13 localhost.localdomain NetworkManager[4573]: <info>  [1752146713.8998] audit: op="connection-delete" uuid="c96bc909-188e-ec64-3a96-6a90982b08ad" name="ens33" pid=4798 uid=0 result="success" Jul 10 19:25:24 localhost.localdomain NetworkManager[4573]: <info>  [1752146724.6406] ifcfg-rh: add connection /etc/sysconfig/network-scripts/ifcfg-ens33 (315df7b6-44cc-436f-a279-ba834a680ada,"ens33") Jul 10 19:25:24 localhost.localdomain NetworkManager[4573]: <info>  [1752146724.6408] audit: op="connection-add" uuid="315df7b6-44cc-436f-a279-ba834a680ada" name="ens33" pid=4819 uid=0 result="success" Jul 10 19:25:30 localhost.localdomain NetworkManager[4573]: <info>  [1752146730.6409] agent-manager: req[0x55e4b011fb60, :1.232/nmcli-connect/0]: agent registered Jul 10 19:25:30 localhost.localdomain NetworkManager[4573]: <info>  [1752146730.6418] audit: op="connection-activate" uuid="315df7b6-44cc-436f-a279-ba834a680ada" name="ens33" result="fail" reason="No suitable device found for this connection (device lo not available because device is strictly unmanaged)." Jul 10 19:26:47 localhost.localdomain systemd[1]: Stopping Network Manager... Jul 10 19:26:47 localhost.localdomain NetworkManager[4573]: <info>  [1752146807.9682] caught SIGTERM, shutting down normally. Jul 10 19:26:47 localhost.localdomain NetworkManager[4573]: <info>  [1752146807.9714] device (virbr0-nic): released from master device virbr0 Jul 10 19:26:47 localhost.localdomain NetworkManager[4573]: <info>  [1752146807.9739] exiting (success) Jul 10 19:26:48 localhost.localdomain systemd[1]: Stopped Network Manager. Jul 10 19:26:48 localhost.localdomain systemd[1]: Starting Network Manager... Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0241] NetworkManager (version 1.18.8-2.el7_9) is starting... (after a restart) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0248] Read config: /etc/NetworkManager/NetworkManager.conf (lib: 10-slaves-order.conf) (etc: 10-managed-interfaces.conf) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0313] bus-manager: acquired D-Bus service "org.freedesktop.NetworkManager" Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0315] manager[0x560b4f929090]: monitoring kernel firmware directory '/lib/firmware'. Jul 10 19:26:48 localhost.localdomain systemd[1]: Started Network Manager. Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0817] hostname: hostname: using hostnamed Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0818] hostname: hostname changed from (none) to "localhost.localdomain" Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0823] dns-mgr[0x560b4f90c220]: init: dns=default,systemd-resolved rc-manager=file Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0829] manager[0x560b4f929090]: rfkill: Wi-Fi hardware radio set enabled Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.0830] manager[0x560b4f929090]: rfkill: WWAN hardware radio set enabled Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1022] settings: Loaded settings plugin: SettingsPluginIfcfg ("/usr/lib64/NetworkManager/1.18.8-2.el7_9/libnm-settings-plugin-ifcfg-rh.so") Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1025] settings: Loaded settings plugin: NMSIbftPlugin ("/usr/lib64/NetworkManager/1.18.8-2.el7_9/libnm-settings-plugin-ibft.so") Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1025] settings: Loaded settings plugin: NMSKeyfilePlugin (internal) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1038] ifcfg-rh: new connection /etc/sysconfig/network-scripts/ifcfg-ens33 (315df7b6-44cc-436f-a279-ba834a680ada,"ens33") Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1103] manager: rfkill: Wi-Fi enabled by radio killswitch; enabled by state file Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1105] manager: rfkill: WWAN enabled by radio killswitch; enabled by state file Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1106] manager: Networking is disabled by state file Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1108] dhcp-init: Using DHCP client 'dhclient' Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1112] Loaded device plugin: NMAtmManager (/usr/lib64/NetworkManager/1.18.8-2.el7_9/libnm-device-plugin-adsl.so) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1121] Loaded device plugin: NMTeamFactory (/usr/lib64/NetworkManager/1.18.8-2.el7_9/libnm-device-plugin-team.so) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1125] Loaded device plugin: NMWifiFactory (/usr/lib64/NetworkManager/1.18.8-2.el7_9/libnm-device-plugin-wifi.so) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1132] device (lo): carrier: link connected Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1135] manager: (lo): new Generic device (/org/freedesktop/NetworkManager/Devices/1) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1140] device (ens33): carrier: link connected Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1143] manager: (ens33): new Ethernet device (/org/freedesktop/NetworkManager/Devices/2) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1149] manager: (virbr0): new Bridge device (/org/freedesktop/NetworkManager/Devices/3) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1153] manager: (virbr0-nic): new Tun device (/org/freedesktop/NetworkManager/Devices/4) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1159] manager: (docker0): new Bridge device (/org/freedesktop/NetworkManager/Devices/5) Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1195] manager: startup complete Jul 10 19:26:48 localhost.localdomain NetworkManager[4896]: <info>  [1752146808.1620] agent-manager: req[0x560b4f997970, :1.81/org.gnome.Shell.NetworkAgent/1000]: agent registered Jul 10 19:29:29 localhost.localdomain NetworkManager[4896]: <info>  [1752146969.9499] audit: op="connection-delete" uuid="315df7b6-44cc-436f-a279-ba834a680ada" name="ens33" pid=5076 uid=0 result="success" Jul 10 19:29:29 localhost.localdomain NetworkManager[4896]: <info>  [1752146969.9790] ifcfg-rh: add connection /etc/sysconfig/network-scripts/ifcfg-ens33 (a1a427ef-04d5-4210-ae58-7f119a7ae965,"ens33") Jul 10 19:29:29 localhost.localdomain NetworkManager[4896]: <info>  [1752146969.9794] audit: op="connection-add" uuid="a1a427ef-04d5-4210-ae58-7f119a7ae965" name="ens33" pid=5086 uid=0 result="success" Jul 10 19:29:30 localhost.localdomain NetworkManager[4896]: <info>  [1752146970.0068] agent-manager: req[0x560b4f997a90, :1.245/nmcli-connect/0]: agent registered Jul 10 19:29:30 localhost.localdomain NetworkManager[4896]: <info>  [1752146970.0079] audit: op="connection-activate" uuid="a1a427ef-04d5-4210-ae58-7f119a7ae965" name="ens33" result="fail" reason="No suitable device found for this connection (device lo not available because device is strictly unmanaged)." [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+非常棒！你贴出的 `journalctl` 日志已经揭示了关键 **根因** ——我们现在可以明确指出问题来源了。
+
+------
+
+## ✅ 关键信息：
+
+```
+NetworkManager: (ens33): new Ethernet device
+NetworkManager: startup complete
+...
+connection-activate: ens33 → FAIL
+reason="No suitable device found for this connection (device lo not available because device is strictly unmanaged)"
+```
+
+注意：它说的是 **“找不到合适的设备，lo 是 strictly unmanaged”**，这表明 NetworkManager **试图将连接绑到 `lo` 回环接口，而不是 `ens33`** —— 显然，连接和设备映射错了。
+
+> ✅ `ens33` 设备被识别并加入设备管理
+> ❌ **连接记录可能错误地绑定到了 `lo`**
+
+------
+
+## 🧨 **根本原因：你的 `/etc/sysconfig/network-scripts/ifcfg-ens33` 文件内容不完整或错误**
+
+请立刻执行以下命令查看该配置：
+
+```
+cat /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+------
+
+## ✅ 正确的 `ifcfg-ens33` 示例（用于 DHCP）：
+
+请确认内容如下：
+
+```
+TYPE=Ethernet
+BOOTPROTO=dhcp
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+⚠️ **如果缺少 `DEVICE=ens33` 或 `NM_CONTROLLED=yes`**，NetworkManager 可能无法将这个配置与实际网卡正确关联。
+
+------
+
+## 🛠 解决方法（推荐你直接改正配置）：
+
+### 方法 A：用 `nmcli` 自动生成配置（推荐）
+
+```
+nmcli connection delete ens33
+nmcli connection add type ethernet ifname ens33 con-name ens33 autoconnect yes
+```
+
+### 方法 B：手动修复配置文件
+
+```
+sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+内容改成如下：
+
+```
+TYPE=Ethernet
+BOOTPROTO=dhcp
+NAME=ens33
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+然后：
+
+```
+sudo systemctl restart NetworkManager
+nmcli device status
+nmcli connection up ens33
+```
+
+------
+
+## ✅ 成功标志：
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  ens33
+```
+
+然后：
+
+```
+ping -c 4 8.8.8.8
+```
+
+------
+
+请贴出 `cat /etc/sysconfig/network-scripts/ifcfg-ens33` 的结果，我可以确认你是否需要手动修正。你已经快成功了，只差配置这一小步。是否继续？
+
+##### 您说：
+
+ocalhost jdk]# cat /etc/sysconfig/network-scripts/ifcfg-ens33 TYPE=Ethernet PROXY_METHOD=none BROWSER_ONLY=no BOOTPROTO=dhcp DEFROUTE=yes IPV4_FAILURE_FATAL=no IPV6INIT=yes IPV6_AUTOCONF=yes IPV6_DEFROUTE=yes IPV6_FAILURE_FATAL=no IPV6_ADDR_GEN_MODE=stable-privacy NAME=ens33 UUID=a1a427ef-04d5-4210-ae58-7f119a7ae965 DEVICE=ens33 ONBOOT=yes [root@localhost jdk]# 
+
+###### ChatGPT 说：
+
+✅ 你贴出的 `ifcfg-ens33` 配置**基本正确**，但**缺少了一个关键字段**：
+
+```
+NM_CONTROLLED=yes
+```
+
+------
+
+## ❗ 问题说明：
+
+`NM_CONTROLLED=yes` 是控制 **NetworkManager 是否接管该网卡** 的关键字段。
+
+- 如果缺少这个字段（在某些版本中默认为 `no`），NetworkManager **不会管理**该接口，即使配置文件存在、设备正常。
+
+------
+
+## ✅ 解决方法：
+
+现在请按照以下步骤操作：
+
+### ✏️ 修改配置文件，加入关键字段
+
+执行：
+
+```
+sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33
+```
+
+将最后一行后面添加：
+
+```
+NM_CONTROLLED=yes
+```
+
+保存退出。
+
+最终内容应如下：
+
+```
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=ens33
+UUID=a1a427ef-04d5-4210-ae58-7f119a7ae965
+DEVICE=ens33
+ONBOOT=yes
+NM_CONTROLLED=yes
+```
+
+------
+
+### 🔄 重启 NetworkManager：
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+### 🚀 启动连接：
+
+```
+nmcli connection up ens33
+```
+
+------
+
+### 🧪 检查状态：
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+ens33   ethernet  connected  ens33
+```
+
+再验证网络：
+
+```
+ping -c 4 8.8.8.8
+```
+
+------
+
+一旦连通，你就可以继续用 `yum` 安装 JDK 或其他包了。
+
+如果你愿意，我也可以帮你直接配置静态 IP。是否需要？
+
+##### 您说：
+
+[root@localhost jdk]# sudo vi /etc/sysconfig/network-scripts/ifcfg-ens33 [root@localhost jdk]# sudo systemctl restart NetworkManager [root@localhost jdk]# nmcli connection up ens33 Error: Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged). [root@localhost jdk]# cat /etc/sysconfig/network-scripts/ifcfg-ens33 TYPE=Ethernet PROXY_METHOD=none BROWSER_ONLY=no BOOTPROTO=dhcp DEFROUTE=yes IPV4_FAILURE_FATAL=no IPV6INIT=yes IPV6_AUTOCONF=yes IPV6_DEFROUTE=yes IPV6_FAILURE_FATAL=no IPV6_ADDR_GEN_MODE=stable-privacy NAME=ens33 UUID=a1a427ef-04d5-4210-ae58-7f119a7ae965 DEVICE=ens33 ONBOOT=yes NM_CONTROLLED=yes [root@localhost jdk]# 为啥还是不行啊
+
+###### ChatGPT 说：
+
+你现在的配置基本是对的，但错误信息依旧是：
+
+```
+Connection activation failed: No suitable device found for this connection (device lo not available because device is strictly unmanaged).
+```
+
+这说明 NetworkManager **仍然错误地尝试将 `ens33` 的连接绑定到 `lo`（回环接口）上**，不是设备不存在，而是**设备和连接没有正确绑定上**。
+
+------
+
+## ✅ 解决这个问题的终极方案是：**删除所有旧连接，重新创建绑定**
+
+------
+
+### 🔧 **一键操作步骤（强烈建议你按顺序执行）**
+
+#### ① 删除所有可能遗留的 `ens33` 配置
+
+```
+nmcli connection delete ens33
+```
+
+确认输出：`Connection 'ens33' ... successfully deleted`
+
+#### ② 重新创建连接，并明确绑定设备（不要带 UUID）
+
+```
+nmcli connection add type ethernet ifname ens33 con-name ens33 autoconnect yes
+```
+
+此时，它会自动写入 `/etc/sysconfig/network-scripts/ifcfg-ens33` 文件，且自动绑定。
+
+#### ③ 启用连接
+
+```
+nmcli connection up ens33
+```
+
+这时候你应该**不会再看到 “device lo not available” 错误了**。
+
+------
+
+### ✅ 检查是否已成功：
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+DEVICE  TYPE      STATE      CONNECTION
+ens33   ethernet  connected  ens33
+```
+
+然后：
+
+```
+ip addr show ens33
+ping -c 4 8.8.8.8
+```
+
+------
+
+## 🔍 如果仍失败，请再确认：
+
+### ✔️ 当前设备列表：
+
+```
+nmcli device show
+```
+
+确认其中 `ens33` 是否存在且状态正常。
+
+### ✔️ 当前连接绑定情况：
+
+```
+nmcli connection show
+```
+
+你应该只看到一个 `ens33`，并绑定了 `DEVICE ens33`。
+
+------
+
+### 🚀 成功标志：
+
+你能看到 `ens33 connected` 并能 `ping 8.8.8.8`，然后再执行：
+
+```
+yum install java-11-openjdk
+```
+
+即可。
+
+------
+
+如果你愿意，我可以贴出这部分配置文件的 **最终模板备份**，确保你可以从头干净配置一次。你要不要？
+
+##### 您说：
+
+[root@localhost jdk]# nmcli device show GENERAL.DEVICE:                         docker0 GENERAL.TYPE:                           bridge GENERAL.HWADDR:                         02:42:EC:52:1B:DA GENERAL.MTU:                            1500 GENERAL.STATE:                          10 (unmanaged) GENERAL.CONNECTION:                     -- GENERAL.CON-PATH:                       -- IP4.ADDRESS[1]:                         172.17.0.1/16 IP4.GATEWAY:                            -- IP4.ROUTE[1]:                           dst = 172.17.0.0/16, nh = 0.0.0.0, mt = 0 IP6.GATEWAY:                            -- GENERAL.DEVICE:                         virbr0 GENERAL.TYPE:                           bridge GENERAL.HWADDR:                         52:54:00:BB:31:05 GENERAL.MTU:                            1500 GENERAL.STATE:                          10 (unmanaged) GENERAL.CONNECTION:                     -- GENERAL.CON-PATH:                       -- IP4.ADDRESS[1]:                         192.168.122.1/24 IP4.GATEWAY:                            -- IP4.ROUTE[1]:                           dst = 192.168.122.0/24, nh = 0.0.0.0, mt = 0 IP6.GATEWAY:                            -- GENERAL.DEVICE:                         ens33 GENERAL.TYPE:                           ethernet GENERAL.HWADDR:                         00:0C:29:B8:47:1A GENERAL.MTU:                            1500 GENERAL.STATE:                          10 (unmanaged) GENERAL.CONNECTION:                     -- GENERAL.CON-PATH:                       -- WIRED-PROPERTIES.CARRIER:               on IP4.ADDRESS[1]:                         192.168.30.200/24 IP4.GATEWAY:                            192.168.30.1 IP4.ROUTE[1]:                           dst = 0.0.0.0/0, nh = 192.168.30.1, mt = 0 IP4.ROUTE[2]:                           dst = 169.254.0.0/16, nh = 0.0.0.0, mt = 1002 IP4.ROUTE[3]:                           dst = 192.168.30.0/24, nh = 0.0.0.0, mt = 0 IP6.ADDRESS[1]:                         fe80::20c:29ff:feb8:471a/64 IP6.GATEWAY:                            -- IP6.ROUTE[1]:                           dst = fe80::/64, nh = ::, mt = 256 IP6.ROUTE[2]:                           dst = ff00::/8, nh = ::, mt = 256, table=255 GENERAL.DEVICE:                         lo GENERAL.TYPE:                           loopback GENERAL.HWADDR:                         00:00:00:00:00:00 GENERAL.MTU:                            65536 GENERAL.STATE:                          10 (unmanaged) GENERAL.CONNECTION:                     -- GENERAL.CON-PATH:                       -- IP4.ADDRESS[1]:                         127.0.0.1/8 IP4.GATEWAY:                            -- IP6.ADDRESS[1]:                         ::1/128 IP6.GATEWAY:                            -- GENERAL.DEVICE:                         virbr0-nic GENERAL.TYPE:                           tun GENERAL.HWADDR:                         52:54:00:BB:31:05 GENERAL.MTU:                            1500 GENERAL.STATE:                          10 (unmanaged) GENERAL.CONNECTION:                     -- GENERAL.CON-PATH:                       -- lines 33-61/61 (END)
+
+###### ChatGPT 说：
+
+你的输出揭示了问题的**最终真相**：
+
+------
+
+### ⚠️ 关键状态：
+
+```
+GENERAL.DEVICE: ens33
+GENERAL.STATE:  10 (unmanaged)
+GENERAL.CONNECTION: --
+```
+
+说明：
+
+> 🔴 `ens33` 是物理网卡，**IP 已获取、链路已通（carrier: on）**，但仍然被 `NetworkManager` 标记为 **unmanaged**，这就解释了一切。
+
+------
+
+## ✅ 彻底解决方案
+
+下面是终极修复流程，**100% 解决“ens33 unmanaged”问题**：
+
+------
+
+### ✅ **步骤 1：编辑 NetworkManager 配置，显式允许它管理所有设备**
+
+打开文件：
+
+```
+sudo vi /etc/NetworkManager/conf.d/10-managed-interfaces.conf
+```
+
+**确认内容如下**（或者直接复制这段内容覆盖）：
+
+```
+[keyfile]
+unmanaged-devices=none
+```
+
+> ⚠️ 如果你看到其他配置如 `match-device=type:ethernet`, 请删掉。
+
+------
+
+### ✅ **步骤 2：强制清除旧状态并重启服务**
+
+```
+sudo systemctl stop NetworkManager
+sudo rm -f /var/lib/NetworkManager/NetworkManager.state
+sudo systemctl start NetworkManager
+```
+
+这一步是关键，让 NetworkManager 放弃之前错误缓存的状态。
+
+------
+
+### ✅ **步骤 3：确认设备是否变为 managed**
+
+运行：
+
+```
+nmcli device status
+```
+
+你应该看到：
+
+```
+ens33   ethernet  disconnected  --
+```
+
+说明已受控。
+
+------
+
+### ✅ **步骤 4：重新添加连接并启动**
+
+```
+nmcli connection add type ethernet ifname ens33 con-name ens33 autoconnect yes
+nmcli connection up ens33
+```
+
+------
+
+## 🧪 最终验证
+
+```
+nmcli device status
+```
+
+应显示：
+
+```
+ens33   ethernet  connected  ens33
+ping -c 4 8.8.8.8
+```
+
+------
+
+### 📦 安装 JDK
+
+现在你可以：
+
+```
+yum install java-11-openjdk
+```
+
+------
+
+## 🟩 如果还不通，请贴出：
+
+```
+cat /etc/NetworkManager/conf.d/10-managed-interfaces.conf
+nmcli general status
+```
+
+我会马上帮你验证环境彻底恢复。是否继续？
+
+超出此点的消息将只对您显示
+
+##### 您说：
+
+[root@localhost tom]# cat /etc/sysconfig/network-scripts/ifcfg-ens33 TYPE=Ethernet DEVICE=ens33 NAME=ens33 BOOTPROTO=static ONBOOT=yes IPADDR=192.168.30.200 GATEWAY=192.168.30.1 NETMASK=255.255.255.0 DNS1=8.8.8.8 DNS2=8.8.4.4 NM_CONTROLLED=yes 配置静态ip没法联网吗
+
+###### ChatGPT 说：
+
+你配置了静态 IP：
+
+```
+IPADDR=192.168.30.200
+GATEWAY=192.168.30.1
+NETMASK=255.255.255.0
+DNS1=8.8.8.8
+DNS2=8.8.4.4
+```
+
+这个配置从语法上是正确的，但如果无法联网，可能是下面几类问题导致的：
+
+------
+
+### ✅ 先验证基础连通性
+
+1. 查看 IP 是否已生效：
+
+```
+ip addr show ens33
+```
+
+1. 尝试 ping 网关：
+
+```
+ping -c 4 192.168.30.1
+```
+
+如果这个都 ping 不通，说明你的网络连接或桥接设置有问题（比如你用的是虚拟机但未配置桥接或 NAT）。
+
+1. 尝试 ping 公网：
+
+```
+ping -c 4 8.8.8.8
+```
+
+如果 ping 公网不通，可能是网关没生效或网络出口有问题。
+
+1. 尝试 DNS 名称解析：
+
+```
+ping www.baidu.com
+```
+
+如果 8.8.8.8 通但域名不通，说明 DNS 配置未生效，可用下面命令刷新：
+
+```
+sudo systemctl restart NetworkManager
+```
+
+------
+
+### 🛠 补充建议
+
+1. 你的 ifcfg 文件使用的是 static 模式，确保 NetworkManager 是管理状态：
+
+在 /etc/NetworkManager/NetworkManager.conf 中，确认以下内容：
+
+```
+[main]
+plugins=ifcfg-rh
+
+[keyfile]
+unmanaged-devices=none
+```
+
+1. 重启网络服务：
+
+```
+sudo systemctl restart NetworkManager
+nmcli connection reload
+nmcli connection up ens33
+```
+
+------
+
+### 🧪 如果依然不通，请贴出以下输出：
+
+- ip addr show ens33
+- ip route
+- ping -c 4 192.168.30.1
+- ping -c 4 8.8.8.8
+- cat /etc/resolv.conf
+
+我可以快速帮你定位是哪一层的问题。
+
+如果你是在 VMware/VirtualBox 虚拟机里运行这个 CentOS，告诉我你用的桥接还是 NAT，也非常关键。
+
+
+
+
+
+
+
+
+
+ChatGPT 也可能会犯错。请核查重要信息。
