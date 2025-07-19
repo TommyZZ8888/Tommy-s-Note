@@ -274,7 +274,48 @@ sudo systemctl enable nginx
 
 
 
+```nginx
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
 
+events {
+    worker_connections 768;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout  65;
+
+    server {
+        listen       8080;
+        server_name  192.168.111.155;
+
+        root /home/tom/app/dist;
+        index index.html;
+
+        location = /favicon.ico {
+            try_files /favicon.ico =404;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /api/ {
+            proxy_pass http://localhost:8090;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}
+```
 
 
 
