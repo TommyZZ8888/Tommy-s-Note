@@ -4,8 +4,6 @@
 
 参考：https://www.wonote.com/post/debian-12-xi-tong-nei-an-zhuang-docker-xiang-xi-bu-zou/
 
-参考： [Debian12安装Docker及docker-compose教程 - 有一本小书](http://www.tanorqi.cn/archives/wei-ming-ming-wen-zhang#title-4)
-
 也可参考： [Debian12 安装Docker 和 docker-compose - 陈伦刚的个人博客](https://chenlungang.com/?p=bc50b235-7f68-4489-946c-bd59776f64f8)
 
 ```sh
@@ -34,26 +32,58 @@ sudo systemctl status docker
 # 添加用户到 docker 组（可选）
 sudo usermod -aG docker $USER
 
-
-# 修改 Docker 配置 （可选）
-# 以下配置会增加一段自定义内网 IPv6 地址，开启容器的 IPv6 功能，以及限制日志文件大小，防止 Docker 日志塞满硬盘 (泪的教训)：
-
-cat > /etc/docker/daemon.json << EOF
-{
-    "log-driver": "json-file",
-    "log-opts": {
-        "max-size": "20m",
-        "max-file": "3"
-    },
-    "ipv6": true,
-    "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
-    "experimental":true,
-    "ip6tables":true
-}
-EOF
-
 # 重启
 systemctl restart docker
+```
+
+也可以使用这种方式：
+
+参考： [Debian12安装Docker及docker-compose教程 - 有一本小书](http://www.tanorqi.cn/archives/wei-ming-ming-wen-zhang#title-4)
+
+```sh
+# 更新软件包索引，确保可以获取到最新的软件包列表和版本信息
+sudo apt-get update
+
+# 安装必要的工具和依赖项
+# ca-certificates 用于管理 SSL 证书，确保安全的网络通信
+# curl 是一个用于传输数据的工具，常用于从网络下载文件
+# gnupg 用于处理 GPG 密钥，确保软件源的签名验证
+# software-properties-common 提供了管理软件源的工具
+sudo apt-get install ca-certificates curl gnupg software-properties-common
+
+# 创建一个具有指定权限的目录，用于存储 APT 密钥环
+# -m 0755 表示设置目录权限为 0755，即所有者有读写执行权限，组用户和其他用户有读和执行权限
+# -d 表示创建目录
+# /etc/apt/keyrings 是存储 APT 密钥环的目录
+sudo install -m 0755 -d /etc/apt/keyrings
+
+# 从华为云的 Docker 官方软件源下载 GPG 密钥，并将其添加到系统的 APT 密钥管理系统中
+# -fsSL 是 curl 的选项，-f 表示失败时不显示 HTTP 错误信息，-s 表示静默模式，-S 表示即使在 -s 模式下也显示错误信息，-L 表示跟随重定向
+# apt-key add - 表示从标准输入读取 GPG 密钥并添加到系统中
+curl -fsSL https://mirrors.huaweicloud.com/docker-ce/linux/debian/gpg | sudo apt-key add -
+
+# 向系统的软件源列表中添加 Docker 官方的 Debian 软件源
+# deb 表示这是一个 Debian 风格的软件源
+# [arch=amd64] 表示该软件源仅适用于 64 位架构的系统
+# https://mirrors.huaweicloud.com/docker-ce/linux/debian 是软件源的基础 URL
+# $(lsb_release -cs) 是当前系统的发行版代号，如 buster、bullseye 等
+# stable 表示使用稳定版本的软件包
+sudo add-apt-repository "deb [arch=amd64] https://mirrors.huaweicloud.com/docker-ce/linux/debian $(lsb_release -cs) stable"
+
+# 再次更新软件包索引，以包含新添加的 Docker 软件源
+sudo apt-get update
+安装docker-ce
+# 使用 apt-get 命令安装 Docker 相关组件，-y 参数表示在安装过程中遇到询问时自动回答 "yes"
+# docker-ce 是 Docker 社区版，提供了完整的 Docker 功能
+# docker-ce-cli 是 Docker 社区版的命令行工具，用于与 Docker 守护进程交互
+# containerd.io 是一个容器运行时，负责管理容器的生命周期
+# docker-compose-plugin 是 Docker Compose 插件，用于定义和运行多容器的 Docker 应用
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# 验证 Docker 是否成功安装
+# 执行 docker -v 命令会输出 Docker 的版本信息
+# 如果能正常输出版本号，说明 Docker 已成功安装
+docker -v
 ```
 
 
@@ -175,7 +205,7 @@ docker load -i myimage.tar
 
 
 
-==Dockerfile==
+==Dockerfile==参数
 
 ```sh
 最基本的几个指令为FROM，RUN，COPY，ADD，CMD，ENTRYPOINT,WORKDIR
@@ -364,16 +394,28 @@ server {
 
 ### 5.项目部署
 
-```sh
-/home/tom/app目录下 存放 easy.jar application.yml application-dev.yml
+目录结构：
 
+```bash
+/home/tom/app目录下 存放 easy.jar application.yml application-dev.yml Dockerfile
+```
+
+
+
+Dockerfile文件， 创建镜像命令：docker build -t easyapi . /bin/bash 
+
+```dockerfile
+FROM openjdk:17
+WORKDIR /home/tom/app/
+CMD ["java", "-jar", "easy-api.jar"]
+```
+
+```sh
 /home/tom/app/nginx/html下存放dist目录下的文件
 
 # springboot项目启动命令
 docker run -d -p 8090:8090 -v /home/tom/app/docker/easy-api.jar:/home/tom/app/easy-api.jar -v /home/tom/app/docker/application-dev.yml:/home/tom/app/application-dev.yml -v /home/tom/app/docker/application.yml:/home/tom/app/application.yml --name easyapi easy-api
 ```
-
-
 
 
 
@@ -497,8 +539,97 @@ server {
 
 
 
-```
-docker save -o tom.tar openjdk:17 mysql:8.0.23 redis:7.2-alpine nginx:latest easy:latest
+```sh
+# 保存镜像到tar
+docker save -o tom.tar openjdk:17 mysql:8.0.23 redis:7.2-alpine nginx:latest easyapi:latest
 
+# 解压镜像
+docker load -i tom.tar
+```
+
+
+
+docker-compose.yml文件
+
+```yml
+version: '3.8' # 推荐使用较新的 Docker Compose 版本，例如 3.8
+
+services:
+  # MySQL 服务
+  mysql:
+    image: mysql:8.0.23 # 使用指定的 MySQL 镜像版本
+    container_name: mysql # 指定容器名称
+    ports:
+      - "3307:3306" # 端口映射：宿主机3307 -> 容器3306
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456 # 设置 MySQL root 用户的密码
+    volumes:
+      # 数据卷映射：将宿主机路径映射到容器内部
+      - /usr/local/docker/mysql/mysql-files:/var/lib/mysql-files # MySQL文件目录
+      - /usr/local/docker/mysql/conf:/etc/mysql # MySQL配置文件目录
+      - /usr/local/docker/mysql/logs:/var/log/mysql # MySQL日志目录
+      - /usr/local/docker/mysql/data:/var/lib/mysql # MySQL数据目录
+    restart: unless-stopped # 容器退出时自动重启，除非手动停止
+    # networks: # 如果需要自定义网络，可以在这里添加
+    #   - my_network
+
+  # Nginx 服务
+  nginx:
+    image: nginx:latest # 使用最新的 Nginx 镜像
+    container_name: nginx # 指定容器名称
+    ports:
+      - "8099:8099" # 端口映射：宿主机8099 -> 容器8099
+    volumes:
+      # 配置文件映射：注意宿主机路径与容器内路径的对应
+      - /home/tom/app/nginx/conf/nginx.conf:/etc/nginx/nginx.conf # Nginx主配置文件
+      - /home/tom/app/nginx/conf/conf.d:/etc/nginx/conf.d # Nginx额外配置目录
+      - /home/tom/app/nginx/log:/var/log/nginx # Nginx日志目录
+      - /home/tom/app/nginx/html:/usr/share/nginx/html # Nginx静态文件目录
+    restart: unless-stopped
+    depends_on: # 依赖 MySQL 和 EasyAPI 服务，确保它们先启动
+      - mysql
+      - easyapi
+    # networks:
+    #   - my_network
+
+  # Redis 服务
+  redis:
+    image: redis # 默认使用 latest 标签
+    container_name: redis # 指定容器名称
+    ports:
+      - "6380:6379" # 端口映射：宿主机6380 -> 容器6379
+    command: redis-server --requirepass 123456 # 容器启动时执行的命令，设置密码
+    restart: unless-stopped
+    # networks:
+    #   - my_network
+
+  # EasyAPI 服务
+  easyapi:
+    image: easy-api # 使用自定义的 easy-api 镜像
+    container_name: easyapi # 指定容器名称
+    ports:
+      - "8090:8090" # 端口映射：宿主机8090 -> 容器8090
+    volumes:
+      # 应用文件和配置文件映射
+      - /home/tom/app/docker/easy-api.jar:/home/tom/app/easy-api.jar # Java Jar 包
+      - /home/tom/app/docker/application-dev.yml:/home/tom/app/application-dev.yml # 开发环境配置文件
+      - /home/tom/app/docker/application.yml:/home/tom/app/application.yml # 生产环境配置文件
+    restart: unless-stopped
+    depends_on: # 依赖 MySQL 和 Redis 服务，确保它们先启动
+      - mysql
+      - redis
+    # networks:
+    #   - my_network
+
+# 如果需要自定义网络，可以在这里定义
+# networks:
+#   my_network:
+#     driver: bridge
+
+```
+
+```sh
+docker-compose up -d
+docker-compose down
 ```
 
