@@ -34,6 +34,7 @@
 - 熟练使用版本管理工具**git，svn**；熟悉搜索引擎**RediSearch**
 - 熟悉**设计模式**，有在工作中使用来提高程序可扩展性和可维护性
 - 熟悉**vue3**的使用，熟悉**typeScript/javaScript**的使用
+- 熟悉**python**的使用，熟悉python web框架 **Django**，**Flask**，熟悉网络爬虫技术
 
 <hr/>
 

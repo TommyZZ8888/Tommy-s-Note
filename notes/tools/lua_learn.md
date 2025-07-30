@@ -1,3 +1,4 @@
+```lua
 -- 直接赋值是全局变量一般不要这么使用
 a = 10 
 -- local是指定当前作用域（一般指大括号或当前文件内）有效的变量
@@ -102,3 +103,5 @@ if 0 then print('0 = true') end
 if not nil then print('nil = false') end
 -- 下标从1开始, sub左闭右闭
 print(string.sub("abc", 1,2)) -- ab
+```
+

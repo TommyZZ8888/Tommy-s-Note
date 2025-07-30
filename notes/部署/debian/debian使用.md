@@ -140,6 +140,18 @@
 按 Enter
 用 n/N 在结果间导航
 
+^回到一行开始位置 $回到一行结束位置
+
+yy  复制内容 类似ctrl+c
+p	粘贴内容 类似ctrl+v
+dd	删除内容 类似ctrl+x
+u 撤销
+
+ctrl+f 向前翻页
+ctrl+b 向后翻页
+ctrl+u 向上翻半页
+ctrl+d 向下翻半页
+
 
 
 ```
